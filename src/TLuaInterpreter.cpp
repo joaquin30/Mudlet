@@ -260,6 +260,160 @@ double TLuaInterpreter::getVerifiedDouble(lua_State* L, const char* functionName
 }
 
 // No documentation available in wiki - internal function
+// Matches the lua type of a function parameter or raises an error
+// Example:
+// switch (matchLuaType(L, __func__, 1, "name", {LUA_TNUMBER, LUA_TSTRING}) {
+//      case LUA_TNUMBER:
+//          ...
+//          break;
+//      case LUA_TSTRING:
+//          ...
+//          break;
+//      default:
+//          Q_UNREACHABLE();
+// }
+int TLuaInterpreter::matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional)
+{
+    int type = lua_type(L, pos);
+    for (int luaType : luaTypes) {
+        if (type == luaType) {
+            return luaType;
+        }
+    }
+
+    static const QStringList luaTypenames = {"nil", "boolean", "lightuserdata", "number", "string", "table", "function", "userdata", "thread"};
+    QStringList publicType;
+    for (int luaType : luaTypes) {
+        if (0 <= luaType && luaType < luaTypenames.size())
+            publicType.push_back(luaTypenames[luaType]);
+    }
+
+    errorArgumentType(L, functionName, pos, publicName, publicType.join(" or ").toUtf8().constData(), isOptional);
+    lua_error(L);
+    Q_UNREACHABLE();
+}
+
+// No documentation available in wiki - internal function
+// See also: getVerifiedBool
+int TLuaInterpreter::getVerifiedFunctionRef(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    if (!lua_isfunction(L, pos)) {
+        errorArgumentType(L, functionName, pos, publicName, "number", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+
+    // Move the function to the top of the stack, to get its reference with luaL_ref
+    lua_pushvalue(L, pos);
+    return luaL_ref(L, LUA_REGISTRYINDEX);
+}
+
+// No documentation available in wiki - internal function
+// Raises an error if the type of the parameter is not boolean, number o nil
+// Returns false if the value is false, 0, nil or none; otherwise returns true
+// See also: getVerifiedBool
+bool TLuaInterpreter::getVerifiedBooleanLikeValue(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    switch (lua_type(L, pos)) {
+        case LUA_TBOOLEAN:
+            return lua_toboolean(L, pos);
+        case LUA_TNUMBER:
+            return lua_tointeger(L, pos) != 0;
+        case LUA_TNIL:
+        case LUA_TNONE:
+            return false;
+        default:
+            errorArgumentType(L, functionName, pos, publicName, "boolean or number (0/1) or nil or none", isOptional);
+            lua_error(L);
+            Q_UNREACHABLE();
+    }
+}
+
+// No documentation available in wiki - internal function
+// Verifies if a table is of type {number, number, ...}
+// See also: getVerifiedBool
+QList<double> TLuaInterpreter::getVerifiedDoubleList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    if (lua_type(L, pos) != LUA_TTABLE) {
+        errorArgumentType(L, functionName, pos, publicName, "table of numbers", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+
+    QList<double> list;
+    lua_pushnil(L);
+    while (lua_next(L, pos) != -1) {
+        if (lua_type(L, -1) != LUA_TNUMBER) {
+            errorArgumentType(L, functionName, pos, publicName, "number inside table", isOptional);
+            lua_error(L);
+            Q_UNREACHABLE();
+        }
+
+        list.push_back(lua_tonumber(L, -1));
+        lua_pop(L, 1);
+    }
+
+    return list;
+}
+
+// No documentation available in wiki - internal function
+// Verifies if a table is of type {string, string, ...}
+// See also: getVerifiedBool
+QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    if (lua_type(L, pos) != LUA_TTABLE) {
+        errorArgumentType(L, functionName, pos, publicName, "table of strings", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+
+    QStringList list;
+    lua_pushnil(L);
+    while (lua_next(L, pos) != -1) {
+        if (lua_type(L, -1) != LUA_TSTRING) {
+            errorArgumentType(L, functionName, pos, publicName, "string inside table", isOptional);
+            lua_error(L);
+            Q_UNREACHABLE();
+        }
+
+        list.push_back(lua_tostring(L, -1));
+        lua_pop(L, 1);
+    }
+
+    return list;
+}
+
+QMap<QString, QString> TLuaInterpreter::getVerifiedStringMap(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    if (lua_type(L, pos) != LUA_TTABLE) {
+        errorArgumentType(L, functionName, pos, publicName, "table of key/value strings", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+
+    QMap<QString, QString> list;
+    lua_pushnil(L);
+    while (lua_next(L, pos) != -1) {
+        if (lua_type(L, -2) != LUA_TSTRING) {
+            errorArgumentType(L, functionName, pos, publicName, "string key inside table", isOptional);
+            lua_error(L);
+            Q_UNREACHABLE();
+        }
+
+        if (lua_type(L, -1) != LUA_TSTRING) {
+            errorArgumentType(L, functionName, pos, publicName, "string value inside table", isOptional);
+            lua_error(L);
+            Q_UNREACHABLE();
+        }
+
+        list.insert(lua_tostring(L, -2), lua_tostring(L, -2));
+        lua_pop(L, 1);
+    }
+
+    return list;
+}
+
+// No documentation available in wiki - internal function
 // Raises a Lua error in case of an API usage mistake
 // See also: getVerifiedBool, warnArgumentValue
 void TLuaInterpreter::errorArgumentType(lua_State* L, const char* functionName, const int pos, const char* publicName, const char* publicType, const bool isOptional)
@@ -1384,35 +1538,12 @@ int TLuaInterpreter::getMudletInfo(lua_State* L)
 // Internal Function createLabel in an UserWindow
 int TLuaInterpreter::createLabelUserWindow(lua_State* L, const QString& windowName, const QString& labelName)
 {
-    const int n = lua_gettop(L);
     const int x = getVerifiedInt(L, "createLabel", 3, "label x-coordinate");
     const int y = getVerifiedInt(L, "createLabel", 4, "label y-coordinate");
     const int width = getVerifiedInt(L, "createLabel", 5, "label width");
     const int height = getVerifiedInt(L, "createLabel", 6, "label height");
-
-    bool fillBackground = false;
-    if ((!lua_isnumber(L, 7)) && (!lua_isboolean(L, 7))) {
-        lua_pushfstring(L, "createLabel: bad argument #7 type (label fillBackground as boolean/number (0/1) expected, got %s!)", luaL_typename(L, 7));
-        return lua_error(L);
-    }
-    if (lua_isboolean(L, 7)) {
-        fillBackground = lua_toboolean(L, 7);
-    } else {
-        fillBackground = (lua_tointeger(L, 7) != 0);
-    }
-
-    bool clickthrough = false;
-    if (n >= 8) {
-        if ((!lua_isnumber(L, 8)) && (!lua_isboolean(L, 8))) {
-            lua_pushfstring(L, "createLabel: bad argument #8 type (label clickthrough as boolean/number (0/1) expected, got %s!)", luaL_typename(L, 8));
-            return lua_error(L);
-        }
-        if (lua_isboolean(L, 8)) {
-            clickthrough = lua_toboolean(L, 8);
-        } else {
-            clickthrough = (lua_tointeger(L, 8) != 0);
-        }
-    }
+    const bool fillBackground = getVerifiedBooleanLikeValue(L, "createLabel", 7, "label fillBackground");
+    const bool clickthrough = getVerifiedBooleanLikeValue(L, "createLabel", 8, "label clickThrough", true);
 
     Host& host = getHostFromLua(L);
     if (auto [success, message] = host.createLabel(windowName, labelName, x, y, width, height, fillBackground, clickthrough); !success) {
@@ -1429,35 +1560,12 @@ int TLuaInterpreter::createLabelUserWindow(lua_State* L, const QString& windowNa
 int TLuaInterpreter::createLabelMainWindow(lua_State* L, const QString& labelName)
 {
     const QString windowName = QLatin1String("main");
-    const int n = lua_gettop(L);
     const int x = getVerifiedInt(L, "createLabel", 2, "label x-coordinate");
     const int y = getVerifiedInt(L, "createLabel", 3, "label y-coordinate");
     const int width = getVerifiedInt(L, "createLabel", 4, "label width");
     const int height = getVerifiedInt(L, "createLabel", 5, "label height");
-
-    bool fillBackground = false;
-    if ((!lua_isnumber(L, 6)) && (!lua_isboolean(L, 6))) {
-        lua_pushfstring(L, "createLabel: bad argument #6 type (label fillBackground as boolean/number (0/1) expected, got %s!)", luaL_typename(L, 6));
-        return lua_error(L);
-    }
-    if (lua_isboolean(L, 6)) {
-        fillBackground = lua_toboolean(L, 6);
-    } else {
-        fillBackground = (lua_tointeger(L, 6) != 0);
-    }
-
-    bool clickthrough = false;
-    if (n >= 7) {
-        if ((!lua_isnumber(L, 7)) && (!lua_isboolean(L, 7))) {
-            lua_pushfstring(L, "createLabel: bad argument #7 type (label clickthrough as boolean/number (0/1) expected, got %s!)", luaL_typename(L, 7));
-            return lua_error(L);
-        }
-        if (lua_isboolean(L, 7)) {
-            clickthrough = lua_toboolean(L, 7);
-        } else {
-            clickthrough = (lua_tointeger(L, 7) != 0);
-        }
-    }
+    const bool fillBackground = getVerifiedBooleanLikeValue(L, "createLabel", 6, "label fillBackground");
+    const bool clickthrough = getVerifiedBooleanLikeValue(L, "createLabel", 7, "label clickthrough", true);
 
     Host& host = getHostFromLua(L);
     if (auto [success, message] = host.createLabel(windowName, labelName, x, y, width, height, fillBackground, clickthrough); !success) {
@@ -1547,13 +1655,8 @@ int TLuaInterpreter::setLabelCallback(lua_State* L, const QString& funcName)
     if (labelName.isEmpty()) {
         return warnArgumentValue(L, __func__, "label name cannot be an empty string");
     }
-    lua_remove(L, 1);
 
-    if (!lua_isfunction(L, 1)) {
-        lua_pushfstring(L, "%s: bad argument #2 type (function expected, got %s!)", funcName.toUtf8().constData(), luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const int func = luaL_ref(L, LUA_REGISTRYINDEX);
+    const int func = getVerifiedFunctionRef(L, funcName.toUtf8().constData(), 2, "label function");
 
     bool lua_result = false;
     if (funcName == qsl("setLabelClickCallback")) {
@@ -2986,15 +3089,13 @@ int TLuaInterpreter::sendRaw(lua_State* L)
 // defined in the parseTelnetCodes() function:
 int TLuaInterpreter::sendSocket(lua_State* L)
 {
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "sendSocket: bad argument #1 type (data as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
+    const QByteArray data = getVerifiedString(L, __func__, 1, "data").toUtf8();
+
     bool parseCodes = false;
-    if (lua_gettop(L) > 1) {
+    if (!lua_isnoneornil(L, 2)) {
         parseCodes = getVerifiedBool(L, __func__, 2, "parse telnet codes {default = false}", true);
     }
-    const QByteArray data{lua_tostring(L, 1)};
+
     std::string dataStdString{parseCodes ? parseTelnetCodes(data).toStdString() : data.toStdString()};
 
     Host& host = getHostFromLua(L);
@@ -3016,12 +3117,7 @@ int TLuaInterpreter::sendSocket(lua_State* L)
 int TLuaInterpreter::setServerEncoding(lua_State* L)
 {
     Host& host = getHostFromLua(L);
-
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "setServerEncoding: bad argument #1 type (newEncoding as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const QByteArray newEncoding = lua_tostring(L, 1);
+    const QByteArray newEncoding = getVerifiedString(L, __func__, 1, "newEncoding").toUtf8();
     QPair<bool, QString> const results = host.mTelnet.setEncoding(newEncoding);
 
     if (!results.first) {

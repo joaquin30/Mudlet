@@ -2329,14 +2329,8 @@ int TLuaInterpreter::setCmdLineAction(lua_State* L)
     if (name.isEmpty()) {
         return warnArgumentValue(L, __func__, "command line name cannot be an empty string");
     }
-    lua_remove(L, 1);
 
-    if (!lua_isfunction(L, 1)) {
-        lua_pushfstring(L, "setCmdLineAction: bad argument #2 type (function expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const int func = luaL_ref(L, LUA_REGISTRYINDEX);
-
+    const int func = getVerifiedFunctionRef(L, __func__, 2, "command line function");
     if (!host.setCmdLineAction(name, func)) {
         return warnArgumentValue(L, __func__, qsl("command line name '%1' not found").arg(name));
     }

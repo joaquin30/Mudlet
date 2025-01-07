@@ -3105,12 +3105,7 @@ int TLuaInterpreter::sendRaw(lua_State* L)
 // defined in the parseTelnetCodes() function:
 int TLuaInterpreter::sendSocket(lua_State* L)
 {
-<<<<<<< HEAD
-    const QByteArray data = getVerifiedString(L, __func__, 1, "data").toUtf8();
-
-=======
     const QByteArray data = getVerifiedCString(L, __func__, 1, "data");
->>>>>>> 642dbb71 (Refactor of error messages. Added multiple getVerifiedX functions and replaced almost all error messages with them. Closes #4671.)
     bool parseCodes = false;
     if (!lua_isnoneornil(L, 2)) {
         parseCodes = getVerifiedBool(L, __func__, 2, "parse telnet codes {default = false}", true);
@@ -3137,11 +3132,7 @@ int TLuaInterpreter::sendSocket(lua_State* L)
 int TLuaInterpreter::setServerEncoding(lua_State* L)
 {
     Host& host = getHostFromLua(L);
-<<<<<<< HEAD
-    const QByteArray newEncoding = getVerifiedString(L, __func__, 1, "newEncoding").toUtf8();
-=======
     const QByteArray newEncoding = getVerifiedCString(L, __func__, 1, "newEncoding");
->>>>>>> 642dbb71 (Refactor of error messages. Added multiple getVerifiedX functions and replaced almost all error messages with them. Closes #4671.)
     QPair<bool, QString> const results = host.mTelnet.setEncoding(newEncoding);
 
     if (!results.first) {

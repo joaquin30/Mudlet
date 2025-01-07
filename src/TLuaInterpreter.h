@@ -732,21 +732,12 @@ private:
     static float getVerifiedFloat(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static double getVerifiedDouble(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static std::pair<bool, QString> getVerifiedStringOrInteger(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-<<<<<<< HEAD
-    static int matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional = false);
-    static int getVerifiedFunctionRef(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-    static bool getVerifiedBooleanLikeValue(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-    static QList<double> getVerifiedDoubleList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-    static QStringList getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-    static QMap<QString, QString> getVerifiedStringMap(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-=======
     static int getVerifiedFunctionRef(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static bool getVerifiedBooleanLikeValue(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static QStringList getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool strictValueType = false, const bool isOptional = false);
     static QString getVerifiedDirectionAsString(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static int getVerifiedDirectionAsNumber(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static int matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional = false);
->>>>>>> 642dbb71 (Refactor of error messages. Added multiple getVerifiedX functions and replaced almost all error messages with them. Closes #4671.)
     static void errorArgumentType(lua_State*, const char* functionName, const int pos, const char* publicName, const char* publicType, const bool isOptional = false);
     static int warnArgumentValue(lua_State*, const char* functionName, const QString& message, const bool useFalseInsteadofNil = false);
     static int warnArgumentValue(lua_State*, const char* functionName, const char* message, const bool useFalseInsteadofNil = false);

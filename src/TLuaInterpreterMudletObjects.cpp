@@ -185,11 +185,7 @@ int TLuaInterpreter::addCmdLineSuggestion(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#adjustStopWatch
 int TLuaInterpreter::adjustStopWatch(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "adjustStopWatch: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
+    (void) matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING});
     Host& host = getHostFromLua(L);
     auto [success, watchId] = getWatchId(L, host);
     if (!success) {
@@ -298,11 +294,7 @@ int TLuaInterpreter::createStopWatch(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#deleteStopWatch
 int TLuaInterpreter::deleteStopWatch(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "deleteStopWatch: bad argument #1 type (stopwatchID as number or stopwatch name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
+    (void) matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING});
     Host& host = getHostFromLua(L);
     auto [success, watchId] = getWatchId(L, host);
     if (!success) {
@@ -755,22 +747,19 @@ int TLuaInterpreter::getStopWatches(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getStopWatchTime
 int TLuaInterpreter::getStopWatchTime(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "getStopWatchTime: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     int watchId = 0;
     QPair<bool, double> result;
     const Host& host = getHostFromLua(L);
-    if (lua_type(L, 1) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         watchId = static_cast<int>(lua_tointeger(L, 1));
         result = host.getStopWatchTime(watchId);
         if (!result.first) {
             return warnArgumentValue(L, __func__, csmInvalidStopWatchID.arg(watchId));
         }
-
-    } else {
+        break;
+    }
+    case LUA_TSTRING: {
         const QString name{lua_tostring(L, 1)};
         // Using an empty string will return the first unnamed stopwatch:
         watchId = host.findStopWatchId(name);
@@ -789,6 +778,10 @@ int TLuaInterpreter::getStopWatchTime(lua_State* L)
                 "stopwatch with name '%1' (ID: %2) has disappeared - this should not happen, please report it to Mudlet developers")
                 .arg(name, QString::number(watchId)));
         }
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, result.second);
@@ -798,11 +791,7 @@ int TLuaInterpreter::getStopWatchTime(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getStopWatchBrokenDownTime
 int TLuaInterpreter::getStopWatchBrokenDownTime(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "getStopWatchBrokenDownTime: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
+    (void) matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING});
     Host& host = getHostFromLua(L);
     auto [success, watchId] = getWatchId(L, host);
     if (!success) {
@@ -1103,22 +1092,7 @@ int TLuaInterpreter::permRegexTrigger(lua_State* L)
 {
     const QString name = getVerifiedString(L, __func__, 1, "trigger name");
     const QString parent = getVerifiedString(L, __func__, 2, "trigger parent");
-
-    QStringList regList;
-    if (!lua_istable(L, 3)) {
-        lua_pushfstring(L, "permRegexTrigger: bad argument #3 type (sub-strings list as table expected, got %s!)",
-                        luaL_typename(L, 3));
-        return lua_error(L);
-    }
-    lua_pushnil(L);
-    while (lua_next(L, 3) != 0) {
-        // key at index -2 and value at index -1
-        if (lua_type(L, -1) == LUA_TSTRING) {
-            regList << lua_tostring(L, -1);
-        }
-        // removes value, but keeps key for next iteration
-        lua_pop(L, 1);
-    }
+    QStringList regList = getVerifiedStringList(L, __func__, 3, "sub-strings list");
 
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
@@ -1142,22 +1116,7 @@ int TLuaInterpreter::permBeginOfLineStringTrigger(lua_State* L)
 {
     const QString name = getVerifiedString(L, __func__, 1, "trigger name");
     const QString parent = getVerifiedString(L, __func__, 2, "trigger parent");
-
-    QStringList regList;
-    if (!lua_istable(L, 3)) {
-        lua_pushfstring(L, "permBeginOfLineStringTrigger: bad argument #3 type (sub-strings list as table expected, got %s!)",
-                        luaL_typename(L, 3));
-        return lua_error(L);
-    }
-    lua_pushnil(L);
-    while (lua_next(L, 3) != 0) {
-        // key at index -2 and value at index -1
-        if (lua_type(L, -1) == LUA_TSTRING) {
-            regList << lua_tostring(L, -1);
-        }
-        // removes value, but keeps key for next iteration
-        lua_pop(L, 1);
-    }
+    QStringList regList = getVerifiedStringList(L, __func__, 3, "sub-strings list");
 
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
@@ -1181,21 +1140,7 @@ int TLuaInterpreter::permSubstringTrigger(lua_State* L)
 {
     const QString name = getVerifiedString(L, __func__, 1, "trigger name");
     const QString parent = getVerifiedString(L, __func__, 2, "trigger parent");
-    QStringList regList;
-    if (!lua_istable(L, 3)) {
-        lua_pushfstring(L, "permSubstringTrigger: bad argument #3 type (sub-strings list as table expected, got %s!)",
-                        luaL_typename(L, 3));
-        return lua_error(L);
-    }
-    lua_pushnil(L);
-    while (lua_next(L, 3) != 0) {
-        // key at index -2 and value at index -1
-        if (lua_type(L, -1) == LUA_TSTRING) {
-            regList << lua_tostring(L, -1);
-        }
-        // removes value, but keeps key for next iteration
-        lua_pop(L, 1);
-    }
+    QStringList regList = getVerifiedStringList(L, __func__, 3, "sub-strings list");
 
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
@@ -1477,25 +1422,24 @@ int TLuaInterpreter::resetProfileIcon(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#resetStopWatch
 int TLuaInterpreter::resetStopWatch(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "resetStopWatch: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     Host& host = getHostFromLua(L);
-    if (lua_type(L, 1) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         QPair<bool, QString> const result = host.resetStopWatch(static_cast<int>(lua_tointeger(L, 1)));
         if (!result.first) {
             return warnArgumentValue(L, __func__, result.second);
         }
-
-        lua_pushboolean(L, true);
-        return 1;
+        break;
     }
-
-    QPair<bool, QString> const result = host.resetStopWatch(lua_tostring(L, 1));
-    if (!result.first) {
-        return warnArgumentValue(L, __func__, result.second);
+    case LUA_TSTRING: {
+        QPair<bool, QString> const result = host.resetStopWatch(lua_tostring(L, 1));
+        if (!result.first) {
+            return warnArgumentValue(L, __func__, result.second);
+        }
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushboolean(L, true);
@@ -1604,19 +1548,19 @@ int TLuaInterpreter::setScript(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setStopWatchName
 int TLuaInterpreter::setStopWatchName(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "setStopWatchName: bad argument #1 type (stopwatchID as number or current name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     int watchId = 0;
     Host& host = getHostFromLua(L);
     QString currentName;
-    if (lua_type(L, 1) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER:
         watchId = static_cast<int>(lua_tointeger(L, 1));
-    } else {
+        break;
+    case LUA_TSTRING:
         // Using an empty string will return the first unnamed stopwatch:
         currentName = lua_tostring(L, 1);
+        break;
+    default:
+        Q_UNREACHABLE();
     }
 
     const QString newName = getVerifiedString(L, __func__, 2, "stopwatch new name");
@@ -1640,11 +1584,7 @@ int TLuaInterpreter::setStopWatchName(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setStopWatchPersistence
 int TLuaInterpreter::setStopWatchPersistence(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "setStopWatchPersistence: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
+    (void) matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING});
     Host& host = getHostFromLua(L);
     auto [success, watchId] = getWatchId(L, host);
     if (!success) {
@@ -1679,13 +1619,9 @@ int TLuaInterpreter::setTriggerStayOpen(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#startStopWatch
 int TLuaInterpreter::startStopWatch(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "startStopWatch: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     Host& host = getHostFromLua(L);
-    if (lua_type(L, 1) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         // Flag (if true) to replicate previous (reset and start again from zero
         // if call is repeated without any other actions being carried out on
         // stopwatch) behaviour if only a single NUMERIC argument (ID) supplied:
@@ -1703,14 +1639,17 @@ int TLuaInterpreter::startStopWatch(lua_State* L)
         if (!result.first) {
             return warnArgumentValue(L, __func__, result.second);
         }
-
-        lua_pushboolean(L, true);
-        return 1;
+        break;
     }
-
-    QPair<bool, QString> const result = host.startStopWatch(lua_tostring(L, 1));
-    if (!result.first) {
-        return warnArgumentValue(L, __func__, result.second);
+    case LUA_TSTRING: {
+        QPair<bool, QString> const result = host.startStopWatch(lua_tostring(L, 1));
+        if (!result.first) {
+            return warnArgumentValue(L, __func__, result.second);
+        }
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushboolean(L, true);
@@ -1720,21 +1659,18 @@ int TLuaInterpreter::startStopWatch(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#stopStopWatch
 int TLuaInterpreter::stopStopWatch(lua_State* L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L, "stopStopWatch: bad argument #1 type (stopwatchID as number or name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     Host& host = getHostFromLua(L);
     int watchId = 0;
-    if (lua_type(L, 1) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 1, "stopwatchID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         watchId = static_cast<int>(lua_tointeger(L, 1));
         QPair<bool, QString> const result = host.stopStopWatch(watchId);
         if (!result.first) {
             return warnArgumentValue(L, __func__, result.second);
         }
-
-    } else {
+        break;
+    }
+    case LUA_TSTRING: {
         const QString name{lua_tostring(L, 1)};
         QPair<bool, QString> const result = host.stopStopWatch(name);
         if (!result.first) {
@@ -1749,6 +1685,10 @@ int TLuaInterpreter::stopStopWatch(lua_State* L)
                 "stopwatch with name '%1' (ID: %2) has disappeared - this should not happen, please report it to Mudlet developers")
                 .arg(name, QString::number(watchId)));
         }
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     // We know that this watchId is valid so can use the return value directly
@@ -1820,25 +1760,24 @@ int TLuaInterpreter::tempAnsiColorTrigger(lua_State* L)
         }
     }
 
-    if (lua_isstring(L, ++s)) {
+    switch (matchLuaType(L, __func__, ++s, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         code = QString::fromUtf8(lua_tostring(L, s));
-    } else if (lua_isfunction(L, s)) {
+        break;
+    case LUA_TFUNCTION:
         // leave code as a null QString(), see below
-    } else {
-        lua_pushfstring(L, "tempAnsiColorTrigger: bad argument #%d type (code to run as a string or a function expected, got %s!)", s, luaL_typename(L, s));
-        return lua_error(L);
+        break;
+    default:
+        Q_UNREACHABLE();
     }
 
     int expiryCount = -1;
-    if (lua_isnumber(L, ++s)) {
+    if (matchLuaType(L, __func__, ++s, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, s);
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, ++s)) {
-        lua_pushfstring(L, "tempAnsiColorTrigger: bad argument #%d value (trigger expiration count must be a number, got %s!)", s, luaL_typename(L, s));
-        return lua_error(L);
     }
 
     const int triggerID = pLuaInterpreter->startTempColorTrigger(ansiFgColor, ansiBgColor, code, expiryCount);
@@ -1861,8 +1800,8 @@ int TLuaInterpreter::tempAlias(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
 
-    if (lua_isfunction(L, 2)) {
-
+    switch (matchLuaType(L, __func__, 2, "lua script", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TFUNCTION: {
         const int result = pLuaInterpreter->startTempAlias(regex, QString());
         if (result == -1) {
             lua_pushnumber(L, -1);
@@ -1880,15 +1819,14 @@ int TLuaInterpreter::tempAlias(lua_State* L)
         lua_pushnumber(L, result);
         return 1;
     }
-
-    if (!lua_isstring(L, 2)) {
-        lua_pushfstring(L, "tempAlias: bad argument #2 type (lua script as string or function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
+    case LUA_TSTRING: {
+        const QString script{lua_tostring(L, 2)};
+        lua_pushnumber(L, pLuaInterpreter->startTempAlias(regex, script));
+        return 1;
     }
-    const QString script{lua_tostring(L, 2)};
-
-    lua_pushnumber(L, pLuaInterpreter->startTempAlias(regex, script));
-    return 1;
+    default:
+        Q_UNREACHABLE();
+    }
 }
 
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#tempBeginOfLineTrigger
@@ -1897,24 +1835,22 @@ int TLuaInterpreter::tempBeginOfLineTrigger(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
     int triggerID;
-    int expiryCount = -1;
     const QString pattern = getVerifiedString(L, __func__, 1, "pattern");
 
-    if (lua_isnumber(L, 3)) {
+    int expiryCount = -1;
+    if (matchLuaType(L, __func__, 3, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 3);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 3)) {
-        lua_pushfstring(L, "tempBeginOfLineTrigger: bad argument #3 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 2)) {
+    switch (matchLuaType(L, __func__, 2, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempBeginOfLineTrigger(pattern, QString(lua_tostring(L, 2)), expiryCount);
-    } else if (lua_isfunction(L, 2)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempBeginOfLineTrigger(pattern, QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -1922,9 +1858,10 @@ int TLuaInterpreter::tempBeginOfLineTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 2);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempBeginOfLineTrigger: bad argument #2 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2109,22 +2046,19 @@ int TLuaInterpreter::tempColorTrigger(lua_State* L)
 
     int triggerID;
     int expiryCount = -1;
-
-    if (lua_isnumber(L, 4)) {
+    if (matchLuaType(L, __func__, 4, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 4);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
-                "trigger expiration count must be greater than zero, got %1").arg(expiryCount));
+                "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 4)) {
-        lua_pushfstring(L, "tempColorTrigger: bad argument #4 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 4));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 3)) {
+    switch (matchLuaType(L, __func__, 3, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempColorTrigger(foregroundColor, backgroundColor, QString(lua_tostring(L, 3)), expiryCount);
-    } else if (lua_isfunction(L, 3)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempColorTrigger(foregroundColor, backgroundColor, QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2132,9 +2066,10 @@ int TLuaInterpreter::tempColorTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 3);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempColorTrigger: bad argument #3 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2147,30 +2082,10 @@ int TLuaInterpreter::tempComplexRegexTrigger(lua_State* L)
     Host& host = getHostFromLua(L);
     const QString triggerName = getVerifiedString(L, __func__, 1, "trigger name create or add to");
     const QString pattern = getVerifiedString(L, __func__, 2, "regex pattern to match");
-
-    if (!lua_isstring(L, 3) && !lua_isfunction(L, 3)) {
-        lua_pushfstring(L, "tempComplexRegexTrigger: bad argument #3 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
-    }
-
-    if (!lua_isnumber(L, 4)) {
-        lua_pushfstring(L, "tempComplexRegexTrigger: bad argument #4 type (multiline flag as number expected, got %s!)", luaL_typename(L, 4));
-        return lua_error(L);
-    }
-    const bool multiLine = lua_tonumber(L, 4);
-
-    if (!lua_isnumber(L, 7)) {
-        lua_pushfstring(L, "tempComplexRegexTrigger: bad argument #7 type (filter flag as number expected, got %s!)", luaL_typename(L, 7));
-        return lua_error(L);
-    }
-    const bool filter = lua_tonumber(L, 7);
-
-    if (!lua_isnumber(L, 8)) {
-        lua_pushfstring(L, "tempComplexRegexTrigger: bad argument #8 type (match all flag as number expected, got %s!)", luaL_typename(L, 8));
-        return lua_error(L);
-    }
-    const bool matchAll = lua_tonumber(L, 8);
-
+    (void) matchLuaType(L, __func__, 3, "code to run", {LUA_TSTRING, LUA_TFUNCTION});
+    const bool multiLine = getVerifiedBooleanLikeValue(L, __func__, 4, "multiline flag");
+    const bool filter = getVerifiedBooleanLikeValue(L, __func__, 7, "filter flag");
+    const bool matchAll = getVerifiedBooleanLikeValue(L, __func__, 8, "match all flag");
     const int fireLength = getVerifiedInt(L, __func__, 12, "fire length");
     const int lineDelta = getVerifiedInt(L, __func__, 13, "line delta");
 
@@ -2224,17 +2139,12 @@ int TLuaInterpreter::tempComplexRegexTrigger(lua_State* L)
     }
 
     int expiryCount = -1;
-
-    if (lua_isnumber(L, 14)) {
+    if (matchLuaType(L, __func__, 14, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 14);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 14)) {
-        lua_pushfstring(L, "tempComplexRegexTrigger: bad argument #14 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 14));
-        return lua_error(L);
     }
 
     QStringList patterns;
@@ -2293,24 +2203,21 @@ int TLuaInterpreter::tempExactMatchTrigger(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
     int triggerID;
-    int expiryCount = -1;
     const QString exactMatchPattern = getVerifiedString(L, __func__, 1, "exact match pattern");
-
-    if (lua_isnumber(L, 3)) {
+    int expiryCount = -1;
+    if (matchLuaType(L, __func__, 3, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 3);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 3)) {
-        lua_pushfstring(L, "tempExactMatchTrigger: bad argument #3 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 2)) {
+    switch (matchLuaType(L, __func__, 2, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempExactMatchTrigger(exactMatchPattern, QString(lua_tostring(L, 2)), expiryCount);
-    } else if (lua_isfunction(L, 2)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempExactMatchTrigger(exactMatchPattern, QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2318,9 +2225,10 @@ int TLuaInterpreter::tempExactMatchTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 2);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempExactMatchTrigger: bad argument #2 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2341,8 +2249,8 @@ int TLuaInterpreter::tempKey(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
 
-    if (lua_isfunction(L, ++argIndex)) {
-
+    switch (matchLuaType(L, __func__, ++argIndex, "lua script", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TFUNCTION: {
         const int result = pLuaInterpreter->startTempKey(keyModifier, keyCode, QString());
         if (result == -1) {
             lua_pushnumber(L, -1);
@@ -2360,16 +2268,16 @@ int TLuaInterpreter::tempKey(lua_State* L)
         lua_pushnumber(L, result);
         return 1;
     }
+    case LUA_TSTRING: {
+        const QString luaFunction{lua_tostring(L, argIndex)};
 
-    if (!lua_isstring(L, argIndex)) {
-        lua_pushfstring(L, "tempKey: bad argument #%d type (lua script as string or function expected, got %s!)", argIndex, luaL_typename(L, argIndex));
-        return lua_error(L);
+        const int timerID = pLuaInterpreter->startTempKey(keyModifier, keyCode, luaFunction);
+        lua_pushnumber(L, timerID);
+        return 1;
     }
-    const QString luaFunction{lua_tostring(L, argIndex)};
-
-    const int timerID = pLuaInterpreter->startTempKey(keyModifier, keyCode, luaFunction);
-    lua_pushnumber(L, timerID);
-    return 1;
+    default:
+        Q_UNREACHABLE();
+    }
 }
 
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#tempLineTrigger
@@ -2383,9 +2291,11 @@ int TLuaInterpreter::tempLineTrigger(lua_State* L)
     // temp line triggers expire naturally on their own, thus don't need the expiry mechanism applicable to all other triggers
     const int dontExpire = -1;
 
-    if (lua_isstring(L, 3)) {
+    switch (matchLuaType(L, __func__, 3, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempLineTrigger(from, howMany, QString(lua_tostring(L, 3)), dontExpire);
-    } else if (lua_isfunction(L, 3)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempLineTrigger(from, howMany, QString(), dontExpire);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2393,9 +2303,10 @@ int TLuaInterpreter::tempLineTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 3);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempLineTrigger: bad argument #3 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2410,22 +2321,19 @@ int TLuaInterpreter::tempPromptTrigger(lua_State* L)
 
     int triggerID;
     int expiryCount = -1;
-
-    if (lua_isnumber(L, 2)) {
+    if (matchLuaType(L, __func__, 2, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 2);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 2)) {
-        lua_pushfstring(L, "tempPromptTrigger: bad argument #2 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 1)) {
+    switch (matchLuaType(L, __func__, 1, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempPromptTrigger(QString(lua_tostring(L, 1)), expiryCount);
-    } else if (lua_isfunction(L, 1)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempPromptTrigger(QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2433,9 +2341,10 @@ int TLuaInterpreter::tempPromptTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 1);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempPromptTrigger: bad argument #1 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2448,24 +2357,21 @@ int TLuaInterpreter::tempRegexTrigger(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
     int triggerID;
-    int expiryCount = -1;
     const QString regexPattern = getVerifiedString(L, __func__, 1, "regex pattern");
-
-    if (lua_isnumber(L, 3)) {
+    int expiryCount = -1;
+    if (matchLuaType(L, __func__, 3, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 3);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 3)) {
-        lua_pushfstring(L, "tempRegexTrigger: bad argument #3 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 2)) {
+    switch (matchLuaType(L, __func__, 2, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempRegexTrigger(regexPattern, lua_tostring(L, 2), expiryCount);
-    } else if (lua_isfunction(L, 2)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempRegexTrigger(regexPattern, QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2473,9 +2379,10 @@ int TLuaInterpreter::tempRegexTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 2);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempRegexTrigger: bad argument #2 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);
@@ -2534,24 +2441,22 @@ int TLuaInterpreter::tempTrigger(lua_State* L)
     Host& host = getHostFromLua(L);
     TLuaInterpreter* pLuaInterpreter = host.getLuaInterpreter();
     int triggerID;
-    int expiryCount = -1;
     const QString substringPattern = getVerifiedString(L, __func__, 1, "substring pattern");
 
-    if (lua_isnumber(L, 3)) {
+    int expiryCount = -1;
+    if (matchLuaType(L, __func__, 3, "trigger expiration count", {LUA_TNUMBER}, true) == LUA_TNUMBER) {
         expiryCount = lua_tonumber(L, 3);
-
         if (expiryCount < 1) {
             return warnArgumentValue(L, __func__, qsl(
                 "trigger expiration count must be nil or greater than zero, got %1").arg(expiryCount));
         }
-    } else if (!lua_isnoneornil(L, 3)) {
-        lua_pushfstring(L, "tempTrigger: bad argument #3 value (trigger expiration count must be nil or a number, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
     }
 
-    if (lua_isstring(L, 2)) {
+    switch (matchLuaType(L, __func__, 2, "code to run", {LUA_TSTRING, LUA_TFUNCTION})) {
+    case LUA_TSTRING:
         triggerID = pLuaInterpreter->startTempTrigger(substringPattern, QString(lua_tostring(L, 2)), expiryCount);
-    } else if (lua_isfunction(L, 2)) {
+        break;
+    case LUA_TFUNCTION: {
         triggerID = pLuaInterpreter->startTempTrigger(substringPattern, QString(), expiryCount);
 
         auto trigger = host.getTriggerUnit()->getTrigger(triggerID);
@@ -2559,9 +2464,10 @@ int TLuaInterpreter::tempTrigger(lua_State* L)
         lua_pushlightuserdata(L, trigger);
         lua_pushvalue(L, 2);
         lua_settable(L, LUA_REGISTRYINDEX);
-    } else {
-        lua_pushfstring(L, "tempTrigger: bad argument #2 type (code to run as a string or a function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
     lua_pushnumber(L, triggerID);

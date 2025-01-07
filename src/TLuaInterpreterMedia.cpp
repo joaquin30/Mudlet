@@ -44,12 +44,7 @@ int TLuaInterpreter::receiveMSP(lua_State* L)
         return warnArgumentValue(L, __func__, "MSP is not currently enabled");
     }
 
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "receiveMSP: bad argument #1 type (message as string expected, got %1!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
-    msg = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 1));
+    msg = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 1, "message"));
     host.mTelnet.setMSPVariables(QByteArray(msg.c_str(), msg.length()));
 
     lua_pushboolean(L, true);

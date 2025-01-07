@@ -320,11 +320,8 @@ int TLuaInterpreter::addCustomLine(lua_State* L)
         return warnArgumentValue(L, __func__, csmInvalidRoomID.arg(id_from));
     }
 
-    if (!lua_isnumber(L, 2) && !lua_istable(L, 2)) {
-        lua_pushfstring(L, "addCustomLine: bad argument #2 type (target roomID as number or coordinate list as table expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-    if (lua_isnumber(L, 2)) {
+    switch (matchLuaType(L, __func__, 2, "target roomID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         id_to = static_cast<int>(lua_tointeger(L, 2));
         TRoom* pR_to = host.mpMap->mpRoomDB->getRoom(id_to);
         if (!pR_to) {
@@ -342,7 +339,9 @@ int TLuaInterpreter::addCustomLine(lua_State* L)
         x.append(static_cast<qreal>(pR_to->x()));
         y.append(static_cast<qreal>(pR_to->y()));
         z.append(pR->z());
-    } else if (lua_istable(L, 2)) {
+        break;
+    }
+    case LUA_TSTRING: {
         lua_pushnil(L);
         int i = 0; // Indexes groups of coordinates in the table
         while (lua_next(L, 2) != 0) {
@@ -410,13 +409,13 @@ int TLuaInterpreter::addCustomLine(lua_State* L)
         if (x.count() != y.count() || x.count() != z.count()) {
             return warnArgumentValue(L, __func__, "mismatch in numbers of coordinates for the points for the custom line given in table as second argument; each must contain three coordinates, i.e. x, y AND z numeric values as a sub-table");
         }
+        break;
+    }
+    default:
+        Q_UNREACHABLE();
     }
 
-    direction = dirToString(L, 3);
-    if (direction.isEmpty()) {
-        lua_pushfstring(L, "addCustomLine: bad argument #3 type (direction as string or number (between 1 and 12 inclusive) expected, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
-    }
+    direction = getVerifiedDirectionAsString(L, __func__, 3, "direction");
     if (!pR->hasExitOrSpecialExit(direction)) {
         return warnArgumentValue(L, __func__, qsl("roomID %1 does not have an exit in a direction that can be identified from '%2'")
             .arg(QString::number(id_from), lua_tostring(L, 3)));
@@ -439,45 +438,41 @@ int TLuaInterpreter::addCustomLine(lua_State* L)
             .arg(lineStyleString));
     }
 
-    if (!lua_istable(L, 5)) {
-        lua_pushfstring(L, "addCustomLine: bad argument #5 type (RGB color components as a table expected, got %s!)", luaL_typename(L, 5));
-        return lua_error(L);
-    } else {
-        lua_pushnil(L);
-        int tind = 0;
-        while (lua_next(L, 5) != 0) {
-            if (++tind <= 3) {
-                if (lua_type(L, -1) != LUA_TNUMBER) {
-                    lua_pushfstring(L,
-                                    "addCustomLine: bad argument #5 table item #%d type (%s color component as a number between 0 and 255 expected, got %s!)",
-                                    tind,
-                                    (tind == 1 ? "red" : (tind == 2 ? "green" : "blue")),
-                                    luaL_typename(L, -1));
-                    return lua_error(L);
-                }
-
-                qint64 const component = lua_tointeger(L, -1);
-                if (component < 0 || component > 255) {
-                    return warnArgumentValue(L, __func__, qsl(
-                        "%1 color component in the table of the fifth argument is %2 which is out of the valid range (0 to 255)")
-                        .arg((tind == 1 ? "red" : (tind == 2 ? "green" : "blue")), QString::number(component)));
-                }
-                switch (tind) {
-                case 1:
-                    r = static_cast<int>(component);
-                    break;
-                case 2:
-                    g = static_cast<int>(component);
-                    break;
-                case 3:
-                    b = static_cast<int>(component);
-                    break;
-                default:
-                    Q_UNREACHABLE();
-                }
+    (void) matchLuaType(L, __func__, 5, "RGB color components", {LUA_TTABLE});
+    lua_pushnil(L);
+    int tind = 0;
+    while (lua_next(L, 5) != 0) {
+        if (++tind <= 3) {
+            if (lua_type(L, -1) != LUA_TNUMBER) {
+                lua_pushfstring(L,
+                                "addCustomLine: bad argument #5 table item #%d type (%s color component as a number between 0 and 255 expected, got %s!)",
+                                tind,
+                                (tind == 1 ? "red" : (tind == 2 ? "green" : "blue")),
+                                luaL_typename(L, -1));
+                return lua_error(L);
             }
-            lua_pop(L, 1);
+
+            qint64 const component = lua_tointeger(L, -1);
+            if (component < 0 || component > 255) {
+                return warnArgumentValue(L, __func__, qsl(
+                    "%1 color component in the table of the fifth argument is %2 which is out of the valid range (0 to 255)")
+                    .arg((tind == 1 ? "red" : (tind == 2 ? "green" : "blue")), QString::number(component)));
+            }
+            switch (tind) {
+            case 1:
+                r = static_cast<int>(component);
+                break;
+            case 2:
+                g = static_cast<int>(component);
+                break;
+            case 3:
+                b = static_cast<int>(component);
+                break;
+            default:
+                Q_UNREACHABLE();
+            }
         }
+        lua_pop(L, 1);
     }
 
     const bool arrow = getVerifiedBool(L, __func__, 6, "end with arrow");
@@ -1048,11 +1043,7 @@ int TLuaInterpreter::createMapper(lua_State* L)
     int counter = 1;
 
     if (n > 4) {
-        if (lua_type(L, 1) != LUA_TSTRING) {
-            lua_pushfstring(L, "createMapper: bad argument #1 type (parent window name as string expected, got %s!)", luaL_typename(L, 1));
-            return lua_error(L);
-        }
-        windowName = lua_tostring(L, 1);
+        windowName = getVerifiedString(L, __func__, 1, "parent window name");
         counter++;
         if (isMain(windowName)) {
             // createMapper only accepts the empty name as the main window
@@ -1677,21 +1668,21 @@ int TLuaInterpreter::getMapEvents(lua_State* L)
 int TLuaInterpreter::getMapLabel(lua_State* L)
 {
     const int areaId = getVerifiedInt(L, __func__, 1, "areaID");
-
-    if (!lua_isstring(L, 2) && !lua_isnumber(L, 2)) {
-        lua_pushfstring(L, "getMapLabel: bad argument #2 type (labelID as number or labelText as string expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
     QString labelText;
     int labelId = -1;
-    if (lua_type(L, 2) == LUA_TNUMBER) {
+    switch (matchLuaType(L, __func__, 2, "labelID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER:
         labelId = lua_tointeger(L, 2);
         if (labelId < 0) {
             return warnArgumentValue(L, __func__, qsl("labelID %1 is invalid, it must be zero or greater").arg(labelId));
         }
-    } else {
+        break;
+    case LUA_TSTRING:
         labelText = lua_tostring(L, 2);
         // Can be an empty string as image labels have no text!
+        break;
+    default:
+        Q_UNREACHABLE();
     }
 
     const Host& host = getHostFromLua(L);
@@ -2341,12 +2332,8 @@ int TLuaInterpreter::getSpecialExits(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getSpecialExitsSwap
 int TLuaInterpreter::getSpecialExitsSwap(lua_State* L)
 {
+    const int id_from = getVerifiedInt(L, __func__, 1, "exit roomID");
     const Host& host = getHostFromLua(L);
-    if (!lua_isnumber(L, 1)) {
-        lua_pushfstring(L, "getSpecialExitsSwap: bad argument #1 type (exit roomID as number expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const int id_from = lua_tointeger(L, 1);
     TRoom* pR = host.mpMap->mpRoomDB->getRoom(id_from);
     if (!pR) {
         return warnArgumentValue(L, __func__, csmInvalidRoomID.arg(id_from));
@@ -2390,13 +2377,7 @@ int TLuaInterpreter::gotoRoom(lua_State* L)
 int TLuaInterpreter::hasExitLock(lua_State* L)
 {
     const int id = getVerifiedInt(L, __func__, 1, "roomID");
-
-    const int dir = dirToNumber(L, 2);
-    if (!dir) {
-        lua_pushfstring(L, "hasExitLock: bad argument #2 type (direction as number or string expected, got %s!)");
-        return lua_error(L);
-    }
-
+    const int dir = getVerifiedDirectionAsNumber(L, __func__, 2, "direction");
     const Host& host = getHostFromLua(L);
     TRoom* pR = host.mpMap->mpRoomDB->getRoom(id);
     if (pR) {
@@ -2542,13 +2523,7 @@ int TLuaInterpreter::loadMap(lua_State* L)
 int TLuaInterpreter::lockExit(lua_State* L)
 {
     const int id = getVerifiedInt(L, __func__, 1, "roomID");
-
-    const int dir = dirToNumber(L, 2);
-    if (!dir) {
-        lua_pushfstring(L, "lockExit: bad argument #2 type (direction as number or string expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-
+    const int dir = getVerifiedDirectionAsNumber(L, __func__, 2, "direction");
     const bool b = getVerifiedBool(L, __func__, 3, "lockIfTrue");
 
     const Host& host = getHostFromLua(L);
@@ -2616,11 +2591,7 @@ int TLuaInterpreter::openMapWidget(lua_State* L)
     QString area = QString();
     int x = -1, y = -1, width = -1, height = -1;
     if (n == 1) {
-        if (lua_type(L, 1) != LUA_TSTRING) {
-            lua_pushfstring(L, "openMapWidget: bad argument #1 type (area as string expected, got %s!)", luaL_typename(L, 1));
-            return lua_error(L);
-        }
-        area = lua_tostring(L, 1);
+        area = getVerifiedString(L, __func__, 1, "area");
     }
 
     if (n > 1) {
@@ -2645,12 +2616,7 @@ int TLuaInterpreter::openMapWidget(lua_State* L)
 int TLuaInterpreter::registerMapInfo(lua_State* L)
 {
     auto name = getVerifiedString(L, __func__, 1, "label");
-
-    if (!lua_isfunction(L, 2)) {
-        lua_pushfstring(L, "registerMapInfo: bad argument #2 type (callback as function expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-    const int callback = luaL_ref(L, LUA_REGISTRYINDEX);
+    const int callback = getVerifiedFunctionRef(L, __func__, 2, "callback");
 
     auto& host = getHostFromLua(L);
     host.mpMap->mMapInfoContributorManager->registerContributor(name, [=](int roomID, int selectionSize, int areaId, int displayAreaId, QColor& infoColor) {
@@ -2722,11 +2688,7 @@ int TLuaInterpreter::removeCustomLine(lua_State* L)
         return warnArgumentValue(L, __func__, csmInvalidRoomID.arg(roomId));
     }
 
-    const QString direction = dirToString(L, 2);
-    if (direction.isEmpty()) {
-        lua_pushfstring(L, "removeCustomLine: bad argument #2 type (direction as string or number (between 1 and 12 inclusive) expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
+    const QString direction = getVerifiedDirectionAsString(L, __func__, 2, "direction");
     if (!pR->hasExitOrSpecialExit(direction)) {
         return warnArgumentValue(L, __func__, qsl(
             "roomID %1 does not have an exit that can be identified from '%2'").arg(QString::number(roomId), lua_tostring(L, 2)));
@@ -3031,30 +2993,22 @@ int TLuaInterpreter::searchRoom(lua_State* L)
     bool exactMatch = false;
     QString room;
 
-    if (lua_isnumber(L, 1)) {
+    switch (matchLuaType(L, __func__, 1, "roomID", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER:
         room_id = lua_tointeger(L, 1);
         gotRoomID = true;
-    } else if (lua_isstring(L, 1)) {
-        if (n > 1) {
-            if (lua_isboolean(L, 2)) {
-                caseSensitive = lua_toboolean(L, 2);
-                if (n > 2) {
-                    if (lua_isboolean(L, 3)) {
-                        exactMatch = lua_toboolean(L, 3);
-                    } else {
-                        lua_pushfstring(L, R"(searchRoom: bad argument #3 type ("exact match" as boolean is optional, got %s!))", luaL_typename(L, 3));
-                        return lua_error(L);
-                    }
-                }
-            } else {
-                lua_pushfstring(L, R"(searchRoom: bad argument #2 type ("case sensitive" as boolean is optional, got %s!))", luaL_typename(L, 2));
-                return lua_error(L);
-            }
-        }
+        break;
+    case LUA_TSTRING:
         room = lua_tostring(L, 1);
-    } else {
-        lua_pushfstring(L, R"(searchRoom: bad argument #1 ("room name" as string expected, got %s!))", luaL_typename(L, 1));
-        return lua_error(L);
+        if (n > 1) {
+            caseSensitive = getVerifiedBool(L, __func__, 2, "case sensitive {default = false}", true);
+        }
+        if (n > 2) {
+            exactMatch = getVerifiedBool(L, __func__, 3, "exact match {default = false}", true);
+        }
+        break;
+    default:
+        Q_UNREACHABLE();
     }
 
     if (gotRoomID) {
@@ -3400,13 +3354,7 @@ int TLuaInterpreter::setExit(lua_State* L)
 {
     const int from = getVerifiedInt(L, __func__, 1, "from roomID");
     const int to = getVerifiedInt(L, __func__, 2, "to roomID");
-
-    const int dir = dirToNumber(L, 3);
-    if (!dir) {
-        lua_pushfstring(L, "setExit: bad argument #3 type (direction as number or string expected, got %s!)", luaL_typename(L, 3));
-        return lua_error(L);
-    }
-
+    const int dir = getVerifiedDirectionAsNumber(L, __func__, 3, "direction");
     const Host& host = getHostFromLua(L);
     lua_pushboolean(L, host.mpMap->setExit(from, to, dir));
     host.mpMap->mMapGraphNeedsUpdate = true;
@@ -3418,15 +3366,8 @@ int TLuaInterpreter::setExit(lua_State* L)
 int TLuaInterpreter::setExitStub(lua_State* L)
 {
     const int roomId = getVerifiedInt(L, __func__, 1, "roomID");
-
-    const int dir = dirToNumber(L, 2);
-    if (!dir) {
-        lua_pushfstring(L, "setExitStub: bad argument #2 type (direction as number or string expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-
+    const int dir = getVerifiedDirectionAsNumber(L, __func__, 2, "direction");
     const bool status = getVerifiedBool(L, __func__, 3, "set/unset");
-
     const Host& host = getHostFromLua(L);
     if (!host.mpMap) {
         return 0;
@@ -3455,11 +3396,7 @@ int TLuaInterpreter::setExitWeight(lua_State* L)
         return warnArgumentValue(L, __func__, csmInvalidRoomID.arg(roomID));
     }
 
-    const QString direction(dirToString(L, 2));
-    if (direction.isEmpty()) {
-        lua_pushfstring(L, "setExitWeight: bad argument #2 type (direction as string or number {between 1 and 12 inclusive} expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
+    const QString direction = getVerifiedDirectionAsString(L, __func__, 2, "direction");
     if (!pR->hasExitOrSpecialExit(direction)) {
         return warnArgumentValue(L, __func__, qsl("roomID %1 does not have an exit that can be identified from '%2'")
             .arg(QString::number(roomID), lua_tostring(L, 2)));

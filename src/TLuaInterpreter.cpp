@@ -205,6 +205,18 @@ bool TLuaInterpreter::getVerifiedBool(lua_State* L, const char* functionName, co
 
 // No documentation available in wiki - internal function
 // See also: getVerifiedBool
+const char* TLuaInterpreter::getVerifiedCString(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    if (!lua_isstring(L, pos)) {
+        errorArgumentType(L, functionName, pos, publicName, "string", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+    return lua_tostring(L, pos);
+}
+
+// No documentation available in wiki - internal function
+// See also: getVerifiedBool
 QString TLuaInterpreter::getVerifiedString(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
 {
     if (!lua_isstring(L, pos)) {
@@ -252,40 +264,6 @@ double TLuaInterpreter::getVerifiedDouble(lua_State* L, const char* functionName
 }
 
 // No documentation available in wiki - internal function
-// Matches the lua type of a function parameter or raises an error
-// Example:
-// switch (matchLuaType(L, __func__, 1, "name", {LUA_TNUMBER, LUA_TSTRING}) {
-//      case LUA_TNUMBER:
-//          ...
-//          break;
-//      case LUA_TSTRING:
-//          ...
-//          break;
-//      default:
-//          Q_UNREACHABLE();
-// }
-int TLuaInterpreter::matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional)
-{
-    int type = lua_type(L, pos);
-    for (int luaType : luaTypes) {
-        if (type == luaType) {
-            return luaType;
-        }
-    }
-
-    static const QStringList luaTypenames = {"nil", "boolean", "lightuserdata", "number", "string", "table", "function", "userdata", "thread"};
-    QStringList publicType;
-    for (int luaType : luaTypes) {
-        if (0 <= luaType && luaType < luaTypenames.size())
-            publicType.push_back(luaTypenames[luaType]);
-    }
-
-    errorArgumentType(L, functionName, pos, publicName, publicType.join(" or ").toUtf8().constData(), isOptional);
-    lua_error(L);
-    Q_UNREACHABLE();
-}
-
-// No documentation available in wiki - internal function
 // See also: getVerifiedBool
 int TLuaInterpreter::getVerifiedFunctionRef(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
 {
@@ -301,57 +279,34 @@ int TLuaInterpreter::getVerifiedFunctionRef(lua_State* L, const char* functionNa
 }
 
 // No documentation available in wiki - internal function
-// Raises an error if the type of the parameter is not boolean, number o nil
+// Raises an error if the type of the parameter is not boolean, number, nil, or none (if the argument is optional)
 // Returns false if the value is false, 0, nil or none; otherwise returns true
 // See also: getVerifiedBool
 bool TLuaInterpreter::getVerifiedBooleanLikeValue(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
 {
     switch (lua_type(L, pos)) {
-        case LUA_TBOOLEAN:
-            return lua_toboolean(L, pos);
-        case LUA_TNUMBER:
-            return lua_tointeger(L, pos) != 0;
-        case LUA_TNIL:
-        case LUA_TNONE:
+    case LUA_TBOOLEAN:
+        return lua_toboolean(L, pos);
+    case LUA_TNUMBER:
+        return lua_tointeger(L, pos) != static_cast<lua_Number>(0);
+    case LUA_TNIL:
+        return false;
+    case LUA_TNONE:
+        if (isOptional) {
             return false;
-        default:
-            errorArgumentType(L, functionName, pos, publicName, "boolean or number (0/1) or nil or none", isOptional);
-            lua_error(L);
-            Q_UNREACHABLE();
-    }
-}
-
-// No documentation available in wiki - internal function
-// Verifies if a table is of type {number, number, ...}
-// See also: getVerifiedBool
-QList<double> TLuaInterpreter::getVerifiedDoubleList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
-{
-    if (lua_type(L, pos) != LUA_TTABLE) {
-        errorArgumentType(L, functionName, pos, publicName, "table of numbers", isOptional);
+        }
+        [[fallthrough]];
+    default:
+        errorArgumentType(L, functionName, pos, publicName, "boolean or number (0/1)", isOptional);
         lua_error(L);
         Q_UNREACHABLE();
     }
-
-    QList<double> list;
-    lua_pushnil(L);
-    while (lua_next(L, pos) != -1) {
-        if (lua_type(L, -1) != LUA_TNUMBER) {
-            errorArgumentType(L, functionName, pos, publicName, "number inside table", isOptional);
-            lua_error(L);
-            Q_UNREACHABLE();
-        }
-
-        list.push_back(lua_tonumber(L, -1));
-        lua_pop(L, 1);
-    }
-
-    return list;
 }
 
 // No documentation available in wiki - internal function
-// Verifies if a table is of type {string, string, ...}
+// Verifies if a table is of type {string, string, ...} and returns a QStringList
 // See also: getVerifiedBool
-QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool strictValueType, const bool isOptional)
 {
     if (lua_type(L, pos) != LUA_TTABLE) {
         errorArgumentType(L, functionName, pos, publicName, "table of strings", isOptional);
@@ -362,47 +317,116 @@ QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* fun
     QStringList list;
     lua_pushnil(L);
     while (lua_next(L, pos) != -1) {
-        if (lua_type(L, -1) != LUA_TSTRING) {
+        if (lua_type(L, -1) == LUA_TSTRING) {
+            list << lua_tostring(L, -1);
+        } else if (strictValueType) {
             errorArgumentType(L, functionName, pos, publicName, "string inside table", isOptional);
             lua_error(L);
             Q_UNREACHABLE();
         }
-
-        list.push_back(lua_tostring(L, -1));
         lua_pop(L, 1);
     }
 
     return list;
 }
 
-QMap<QString, QString> TLuaInterpreter::getVerifiedStringMap(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+// No documentation available in wiki - internal function
+// See also: getVerifiedBool
+QString TLuaInterpreter::getVerifiedDirectionAsString(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
 {
-    if (lua_type(L, pos) != LUA_TTABLE) {
-        errorArgumentType(L, functionName, pos, publicName, "table of key/value strings", isOptional);
+    QString dir = dirToString(L, pos);
+    if (dir.isEmpty()) {
+        errorArgumentType(L, functionName, pos, publicName, "string or number (between 1 and 12 inclusive)", isOptional);
         lua_error(L);
         Q_UNREACHABLE();
     }
+    return dir;
+}
 
-    QMap<QString, QString> list;
-    lua_pushnil(L);
-    while (lua_next(L, pos) != -1) {
-        if (lua_type(L, -2) != LUA_TSTRING) {
-            errorArgumentType(L, functionName, pos, publicName, "string key inside table", isOptional);
-            lua_error(L);
-            Q_UNREACHABLE();
-        }
+// No documentation available in wiki - internal function
+// See also: getVerifiedBool
+int TLuaInterpreter::getVerifiedDirectionAsNumber(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
+{
+    int dir = dirToNumber(L, pos);
+    if (!dir) {
+        errorArgumentType(L, functionName, pos, publicName, "string or number (between 1 and 12 inclusive)", isOptional);
+        lua_error(L);
+        Q_UNREACHABLE();
+    }
+    return dir;
+}
 
-        if (lua_type(L, -1) != LUA_TSTRING) {
-            errorArgumentType(L, functionName, pos, publicName, "string value inside table", isOptional);
-            lua_error(L);
-            Q_UNREACHABLE();
-        }
-
-        list.insert(lua_tostring(L, -2), lua_tostring(L, -2));
-        lua_pop(L, 1);
+// No documentation available in wiki - internal function
+// Matches the lua type of a function parameter or raises an error
+// Example:
+// switch (matchLuaType(L, __func__, 1, "name", {LUA_TNUMBER, LUA_TSTRING}) {
+// case LUA_TNUMBER:
+//     ...
+//     break;
+// case LUA_TSTRING:
+//     ...
+//     break;
+// default:
+//     Q_UNREACHABLE();
+// }
+int TLuaInterpreter::matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional)
+{
+    if (isOptional && lua_isnoneornil(L, pos)) {
+        return LUA_TNONE;
     }
 
-    return list;
+    int type = lua_type(L, pos);
+    for (int luaType : luaTypes) {
+        if (type == luaType) {
+            return luaType;
+        }
+    }
+
+    QStringList publicType;
+    if (isOptional) {
+        publicType << "none" << "nil";
+    }
+    for (int luaType : luaTypes) {
+        switch (luaType) {
+        case LUA_TNIL:
+            publicType << "nil";
+            break;
+        case LUA_TNUMBER:
+            publicType << "number";
+            break;
+        case LUA_TBOOLEAN:
+            publicType << "boolean";
+            break;
+        case LUA_TSTRING:
+            publicType << "string";
+            break;
+        case LUA_TTABLE:
+            publicType << "table";
+            break;
+        case LUA_TFUNCTION:
+            publicType << "function";
+            break;
+        case LUA_TUSERDATA:
+            publicType << "userdata";
+            break;
+        case LUA_TTHREAD:
+            publicType << "thread";
+            break;
+        case LUA_TLIGHTUSERDATA:
+            publicType << "lightuserdata";
+            break;
+        default:
+            publicType << "none";
+            break;
+        }
+    }
+
+    // sort and erase repeated values
+    std::sort(publicType.begin(), publicType.end());
+    publicType.erase(std::unique(publicType.begin(), publicType.end()), publicType.end());
+    errorArgumentType(L, functionName, pos, publicName, publicType.join(" or ").toUtf8().constData(), isOptional);
+    lua_error(L);
+    Q_UNREACHABLE();
 }
 
 // No documentation available in wiki - internal function
@@ -3081,8 +3105,12 @@ int TLuaInterpreter::sendRaw(lua_State* L)
 // defined in the parseTelnetCodes() function:
 int TLuaInterpreter::sendSocket(lua_State* L)
 {
+<<<<<<< HEAD
     const QByteArray data = getVerifiedString(L, __func__, 1, "data").toUtf8();
 
+=======
+    const QByteArray data = getVerifiedCString(L, __func__, 1, "data");
+>>>>>>> 642dbb71 (Refactor of error messages. Added multiple getVerifiedX functions and replaced almost all error messages with them. Closes #4671.)
     bool parseCodes = false;
     if (!lua_isnoneornil(L, 2)) {
         parseCodes = getVerifiedBool(L, __func__, 2, "parse telnet codes {default = false}", true);
@@ -3109,7 +3137,11 @@ int TLuaInterpreter::sendSocket(lua_State* L)
 int TLuaInterpreter::setServerEncoding(lua_State* L)
 {
     Host& host = getHostFromLua(L);
+<<<<<<< HEAD
     const QByteArray newEncoding = getVerifiedString(L, __func__, 1, "newEncoding").toUtf8();
+=======
+    const QByteArray newEncoding = getVerifiedCString(L, __func__, 1, "newEncoding");
+>>>>>>> 642dbb71 (Refactor of error messages. Added multiple getVerifiedX functions and replaced almost all error messages with them. Closes #4671.)
     QPair<bool, QString> const results = host.mTelnet.setEncoding(newEncoding);
 
     if (!results.first) {

@@ -319,11 +319,7 @@ int TLuaInterpreter::createCommandLine(lua_State* L)
     int counter = 1;
 
     if (n > 5) {
-        if (lua_type(L, 1) != LUA_TSTRING) {
-            lua_pushfstring(L, "createCommandLine: bad argument #1 type (parent window name as string expected, got %s!)", luaL_typename(L, 1));
-            return lua_error(L);
-        }
-        windowName = lua_tostring(L, 1);
+        windowName = getVerifiedString(L, __func__, 1, "parent window name");
         counter++;
         if (isMain(windowName)) {
             // createCommandLine only accepts the empty name as the main window
@@ -331,11 +327,7 @@ int TLuaInterpreter::createCommandLine(lua_State* L)
         }
     }
 
-    if (lua_type(L, counter) != LUA_TSTRING) {
-        lua_pushfstring(L, "createCommandLine: bad argument #%d type (commandLine name as string expected, got %s!)", counter, luaL_typename(L, counter));
-        return lua_error(L);
-    }
-    const QString commandLineName{lua_tostring(L, counter)};
+    const QString commandLineName = getVerifiedString(L, __func__, counter, "commandLine name");
     counter++;
     const int x = getVerifiedInt(L, __func__, counter, "commandline x-coordinate");
     counter++;
@@ -1687,11 +1679,7 @@ int TLuaInterpreter::openUserWindow(lua_State* L)
     }
     QString area = QString();
     if (n > 3) {
-        if (lua_type(L, 4) != LUA_TSTRING) {
-            lua_pushfstring(L, "openUserWindow: bad argument #4 type (area as string expected, got %s!)", luaL_typename(L, 4));
-            return lua_error(L);
-        }
-        area = lua_tostring(L, 4);
+        area = getVerifiedString(L, __func__, 4, "area", true);
     }
 
     Host& host = getHostFromLua(L);
@@ -1860,19 +1848,13 @@ int TLuaInterpreter::scaleMovie(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#selectCaptureGroup
 int TLuaInterpreter::selectCaptureGroup(lua_State *L)
 {
-    if (!(lua_isnumber(L, 1) || lua_isstring(L, 1))) {
-        lua_pushfstring(L,
-                        "selectCaptureGroup: bad argument #1 type (capture group as number or capture group name as string expected, got %s!)",
-                        luaL_typename(L, 1));
-        return lua_error(L);
-    }
-
     Host &host = getHostFromLua(L);
     TLuaInterpreter *pL = host.getLuaInterpreter();
     int begin = 0;
     int length = 0;
 
-    if (lua_isnumber(L, 1)) {
+    switch (matchLuaType(L, __func__, 1, "capture group", {LUA_TNUMBER, LUA_TSTRING})) {
+    case LUA_TNUMBER: {
         auto captureGroup = lua_tonumber(L, 1);
         if (captureGroup < 1) {
             lua_pushnumber(L, -1);
@@ -1904,13 +1886,20 @@ int TLuaInterpreter::selectCaptureGroup(lua_State *L)
                 TDebug(Qt::white, Qt::red) << "selectCaptureGroup(" << begin << ", " << length << ")\n" >> &host;
             }
         }
-    } else if (lua_isstring(L, 1)) {
+        break;
+    }
+    case LUA_TSTRING: {
         auto name = lua_tostring(L, 1);
         if (pL->mCapturedNameGroupsPosList.contains(name)) {
             begin = pL->mCapturedNameGroupsPosList.value(name).first;
             length = pL->mCapturedNameGroupsPosList.value(name).second;
         }
+        break;
     }
+    default:
+        Q_UNREACHABLE();
+    }
+
     if (length > 0) {
         const int pos = host.mpConsole->selectSection(begin, length);
         lua_pushnumber(L, pos);
@@ -2110,19 +2099,12 @@ int TLuaInterpreter::setBgColor(lua_State* L)
     int s = 1;
     if (lua_isstring(L, s) && !lua_isnumber(L, s)) {
         windowName = WINDOW_NAME(L, s);
-
-        if (!lua_isnumber(L, ++s)) {
-            lua_pushfstring(L, "setBgColor: bad argument #%d type (red value 0-255 as number expected, got %s!)", s, luaL_typename(L, s));
-            return lua_error(L);
-        }
-        r = static_cast<int>(lua_tonumber(L, s));
-
+        r = getVerifiedInt(L, __func__, ++s, "red value 0-255");
         if (!validRange(r)) {
             return warnArgumentValue(L, __func__, csmInvalidRedValue.arg(r));
         }
     } else if (lua_isnumber(L, s)) {
         r = static_cast<int>(lua_tonumber(L, s));
-
         if (!validRange(r)) {
             return warnArgumentValue(L, __func__, csmInvalidRedValue.arg(r));
         }
@@ -2913,12 +2895,7 @@ int TLuaInterpreter::setWindow(lua_State* L)
     bool show = true;
 
     const QString windowname {WINDOW_NAME(L, 1)};
-
-    if (lua_type(L, 2) != LUA_TSTRING) {
-        lua_pushfstring(L, "setWindow: bad argument #2 type (element name as string expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-    const QString name{lua_tostring(L, 2)};
+    const QString name = getVerifiedString(L, __func__, 2, "element name");
 
     if (n > 2) {
         x = getVerifiedInt(L, __func__, 3, "x-coordinate");
@@ -3187,10 +3164,6 @@ int TLuaInterpreter::wrapLine(lua_State* L)
 // No Documentation - public function but should stay undocumented -- compare https://github.com/Mudlet/Mudlet/issues/1149
 int TLuaInterpreter::pasteWindow(lua_State* L)
 {
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "pasteWindow: bad argument #1 type (window name as string expected, got %s!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
     const QString windowName {WINDOW_NAME(L, 1)};
     Host& host = getHostFromLua(L);
     host.pasteWindow(windowName);

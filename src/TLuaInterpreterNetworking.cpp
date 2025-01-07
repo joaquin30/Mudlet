@@ -296,19 +296,11 @@ int TLuaInterpreter::restartIrc(lua_State* L)
 int TLuaInterpreter::sendATCP(lua_State* L)
 {
     Host& host = getHostFromLua(L);
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "sendATCP: bad argument #1 type (message as string expected, got %1!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const std::string msg = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 1));
+    const std::string msg = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 1, "message"));
 
     std::string what;
     if (lua_gettop(L) > 1) {
-        if (!lua_isstring(L, 2)) {
-            lua_pushfstring(L, "sendATCP: bad argument #2 type (what as string is optional, got %1!)", luaL_typename(L, 2));
-            return lua_error(L);
-        }
-        what = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 2));
+        what = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 2, "what", true));
     }
 
     std::string output;
@@ -340,19 +332,11 @@ int TLuaInterpreter::sendATCP(lua_State* L)
 int TLuaInterpreter::sendGMCP(lua_State* L)
 {
     Host& host = getHostFromLua(L);
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "sendGMCP: bad argument #1 type (message as string expected, got %1!)", luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const std::string msg = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 1));
+    const std::string msg = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 1, "message"));
 
     std::string what;
     if (lua_gettop(L) > 1) {
-        if (!lua_isstring(L, 2)) {
-            lua_pushfstring(L, "sendGMCP: bad argument #2 type (what as string is optional, got %1!)", luaL_typename(L, 2));
-            return lua_error(L);
-        }
-        what = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 2));
+        what = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 2, "what", true));
     }
 
     std::string output;
@@ -413,20 +397,7 @@ int TLuaInterpreter::sendMSDP(lua_State* L)
 {
     Host& host = getHostFromLua(L);
     const int n = lua_gettop(L);
-
-    if (n < 1) {
-        lua_pushstring(L, "sendMSDP: bad argument #1 type (variable name as string expected, got nil!)");
-        return lua_error(L);
-    }
-
-    for (int i = 1; i <= n; ++i) {
-        if (!lua_isstring(L, i)) {
-            lua_pushfstring(L, "sendMSDP: bad argument #%d type (%s as string expected, got %s!)", i, (i == 1 ? "variable name" : "value"), luaL_typename(L, i));
-            return lua_error(L);
-        }
-    }
-
-    const std::string variable = host.mTelnet.encodeAndCookBytes(lua_tostring(L, 1));
+    const std::string variable = host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, 1, "variable name"));
 
     std::string output;
     output += TN_IAC;
@@ -437,7 +408,7 @@ int TLuaInterpreter::sendMSDP(lua_State* L)
 
     for (int i = 2; i <= n; ++i) {
         output += MSDP_VAL;
-        output += host.mTelnet.encodeAndCookBytes(lua_tostring(L, i));
+        output += host.mTelnet.encodeAndCookBytes(getVerifiedCString(L, __func__, i, "value", true));
     }
 
     output += TN_IAC;
@@ -451,12 +422,7 @@ int TLuaInterpreter::sendMSDP(lua_State* L)
 // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#sendTelnetChannel102
 int TLuaInterpreter::sendTelnetChannel102(lua_State* L)
 {
-    if (!lua_isstring(L, 1)) {
-        lua_pushfstring(L, "sendTelnetChannel102: bad argument #1 type (message bytes {2 characters} as string expected, got %s!)",
-                        luaL_typename(L, 1));
-        return lua_error(L);
-    }
-    const std::string msg = lua_tostring(L, 1);
+    const std::string msg = getVerifiedCString(L, __func__, 1, "message bytes {2 characters}");
     if (msg.length() != 2) {
         return warnArgumentValue(L, __func__, qsl(
             "invalid message of length %1 supplied, it should be two bytes (may use lua \\### for each byte where ### is a number between 1 and 254)")
@@ -492,10 +458,7 @@ int TLuaInterpreter::sendTelnetChannel102(lua_State* L)
 int TLuaInterpreter::setIrcChannels(lua_State* L)
 {
     QStringList newchannels;
-    if (!lua_istable(L, 1)) {
-        lua_pushfstring(L, "setIrcChannels: bad argument #1 type (channels as table expected, got %s!)", lua_typename(L, lua_type(L, 1)));
-        return lua_error(L);
-    }
+    (void) matchLuaType(L, __func__, 1, "channels", {LUA_TTABLE});
     lua_pushnil(L);
     while (lua_next(L, 1) != 0) {
         // key at index -2 and value at index -1
@@ -603,11 +566,7 @@ int TLuaInterpreter::getHTTP(lua_State* L)
     QNetworkRequest request = QNetworkRequest(url);
     mudlet::self()->setNetworkRequestDefaults(url, request);
 
-    if (!lua_istable(L, 2) && !lua_isnoneornil(L, 2)) {
-        lua_pushfstring(L, "getHTTP: bad argument #2 type (headers as a table expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-    if (lua_istable(L, 2)) {
+    if (matchLuaType(L, __func__, 2, "headers", {LUA_TTABLE}, true) == LUA_TTABLE) {
         lua_pushnil(L);
         while (lua_next(L, 2) != 0) {
             // key at index -2 and value at index -1
@@ -662,11 +621,7 @@ int TLuaInterpreter::deleteHTTP(lua_State *L)
     QNetworkRequest request = QNetworkRequest(url);
     mudlet::self()->setNetworkRequestDefaults(url, request);
 
-    if (!lua_istable(L, 2) && !lua_isnoneornil(L, 2)) {
-        lua_pushfstring(L, "deleteHTTP: bad argument #2 type (headers as a table expected, got %s!)", luaL_typename(L, 2));
-        return lua_error(L);
-    }
-    if (lua_istable(L, 2)) {
+    if (matchLuaType(L, __func__, 2, "headers", {LUA_TTABLE}, true) == LUA_TTABLE) {
         lua_pushnil(L);
         while (lua_next(L, 2) != 0) {
             // key at index -2 and value at index -1

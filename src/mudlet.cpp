@@ -88,7 +88,7 @@
 #include <memory>
 #include <zip.h>
 #include <QStyle>
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
 #include <QSettings>
 #endif
 
@@ -566,6 +566,8 @@ void mudlet::init()
     // Show the update option if the code is present AND if this is a
     // release OR a public test version, or if you're specifically trying to test Sparkle.
     dactionUpdate->setVisible(releaseVersion || publicTestVersion || qEnvironmentVariableIsSet("DEV_UPDATER"));
+    dactionChangelog->setVisible(releaseVersion || publicTestVersion || qEnvironmentVariableIsSet("DEV_UPDATER"));
+
     // Show the report issue option if the updater code is present (as it is
     // less likely to be for: {Linux} distribution packaged versions of Mudlet
     // - or people hacking their own versions and neither of those types are
@@ -582,6 +584,7 @@ void mudlet::init()
     // Unconditionally hide the update and report bug menu items if the updater
     // code is not included:
     dactionUpdate->setVisible(false);
+    dactionChangelog->setVisible(false);
     dactionReportIssue->setVisible(false);
 #endif
     connect(dactionPackageManager, &QAction::triggered, this, &mudlet::slot_packageManager);
@@ -670,9 +673,11 @@ void mudlet::init()
     pUpdater = new Updater(this, mpSettings, publicTestVersion);
     connect(pUpdater, &Updater::signal_updateAvailable, this, &mudlet::slot_updateAvailable);
     connect(dactionUpdate, &QAction::triggered, this, &mudlet::slot_manualUpdateCheck);
+    connect(dactionChangelog, &QAction::triggered, this, &mudlet::slot_showFullChangelog);
 #if defined(Q_OS_MACOS)
-    // ensure that 'Check for updates' is under the Applications menu per convention
+    // ensure that 'Check for updates' and 'Changelog' are under the Applications menu per convention
     dactionUpdate->setMenuRole(QAction::ApplicationSpecificRole);
+    dactionChangelog->setMenuRole(QAction::ApplicationSpecificRole);
 #else
     connect(pUpdater, &Updater::signal_updateInstalled, this, &mudlet::slot_updateInstalled);
 #endif // !Q_OS_MACOS
@@ -2864,37 +2869,48 @@ void mudlet::deleteProfileData(const QString& profile, const QString& item)
 
 void mudlet::startAutoLogin(const QStringList& cliProfiles)
 {
+    QElapsedTimer timer;
+    timer.start();
+
     QStringList hostList = QDir(getMudletPath(profilesPath)).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
     hostList += TGameDetails::keys();
     hostList << qsl("Mudlet self-test");
     hostList.removeDuplicates();
-    bool openedProfile = false;
-
+    int loadedProfiles = 0;
+    
     for (auto& hostName : cliProfiles){
         if (hostList.contains(hostName)) {
+            QElapsedTimer timer;
+            timer.start();
             doAutoLogin(hostName);
-            openedProfile = true;
             hostList.removeOne(hostName);
+            loadedProfiles++;
+            qDebug() << "Profile" << hostName << "loaded in" << timer.elapsed()/1000.0 << "seconds";
         }
     }
 
     for (auto& hostName : hostList) {
         const QString val = readProfileData(hostName, qsl("autologin"));
         if (val.toInt() == Qt::Checked) {
+            QElapsedTimer timer;
+            timer.start();
             doAutoLogin(hostName);
-            openedProfile = true;
+            loadedProfiles++;
+            qDebug() << "Profile" << hostName << "loaded in" << timer.elapsed()/1000.0 << "seconds";
         }
     }
 
-    if (!openedProfile) {
+    if (loadedProfiles == 0) {
         slot_showConnectionDialog();
+    } else {
+        qDebug() << "All" << loadedProfiles << "profiles in" << timer.elapsed()/1000.0 << "seconds";
     }
 }
 
 // credit to https://github.com/DigitalInBlue/Celero/blob/master/src/Memory.cpp
 int64_t mudlet::getPhysicalMemoryTotal()
 {
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
     MEMORYSTATUSEX memInfo;
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
     GlobalMemoryStatusEx(&memInfo);
@@ -3125,7 +3141,7 @@ void mudlet::slot_multiView(const bool state)
     }
     mMultiView = state;
     bool foundActiveHost = false;
-    for (auto pHost : mHostManager) {
+    for (const auto &pHost : mHostManager) {
         auto console = pHost->mpConsole;
         if (!console) {
             continue;
@@ -3155,7 +3171,7 @@ void mudlet::toggleMute(bool state, QAction* toolbarAction, QAction* menuAction,
         menuAction->setChecked(state);
     }
 
-    for (auto pHost : mHostManager) {
+    for (const auto &pHost : mHostManager) {
         if (state) {
             if (isAPINotGame) {
                 pHost->mpMedia->muteMedia(TMediaData::MediaProtocolAPI);
@@ -3860,6 +3876,11 @@ void mudlet::checkUpdatesOnStart()
 void mudlet::slot_manualUpdateCheck()
 {
     pUpdater->manuallyCheckUpdates();
+}
+
+void mudlet::slot_showFullChangelog()
+{
+    pUpdater->showFullChangelog();
 }
 
 void mudlet::slot_reportIssue()
@@ -4636,7 +4657,7 @@ Hunhandle* mudlet::prepareProfileDictionary(const QString& hostName, QSet<QStrin
 
     wordSet = QSet<QString>(wordList.begin(), wordList.end());
 
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
     mudlet::self()->sanitizeUtf8Path(dictionaryPath, qsl("profile.dic"));
     mudlet::self()->sanitizeUtf8Path(affixPath, qsl("profile.aff"));
 #endif
@@ -4685,7 +4706,7 @@ Hunhandle* mudlet::prepareSharedDictionary()
 
     mWordSet_shared = QSet<QString>(wordList.begin(), wordList.end());
 
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
     mudlet::self()->sanitizeUtf8Path(affixPath, qsl("profile.dic"));
     mudlet::self()->sanitizeUtf8Path(dictionaryPath, qsl("profile.aff"));
 #endif
@@ -4797,7 +4818,7 @@ std::pair<bool, QString> mudlet::resetProfileIcon(const QString& profile)
     return {true, QString()};
 }
 
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
 // credit to Qt Creator (https://github.com/qt-creator/qt-creator/blob/50d93a656789d6e776ecca4adc2e5b487bac0dbc/src/libs/utils/fileutils.cpp)
 static QString getShortPathName(const QString& name)
 {
@@ -5089,7 +5110,7 @@ void mudlet::setupPreInstallPackages(const QString& gameUrl)
 // Copyright (C) 2020 KeePassXC Team <team@keepassxc.org>
 bool mudlet::desktopInDarkMode()
 {
-#if defined(Q_OS_WIN32)
+#if defined(Q_OS_WINDOWS)
     QSettings settings(R"(HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize)", QSettings::NativeFormat);
     return settings.value("AppsUseLightTheme", 1).toInt() == 0;
 #elif defined(Q_OS_MACOS)

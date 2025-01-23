@@ -734,7 +734,7 @@ private:
     static std::pair<bool, QString> getVerifiedStringOrInteger(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static int getVerifiedFunctionRef(lua_State*, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static bool getVerifiedBooleanLikeValue(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
-    static QStringList getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool strictValueType = false, const bool isOptional = false);
+    static QStringList getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static QString getVerifiedDirectionAsString(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static int getVerifiedDirectionAsNumber(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional = false);
     static int matchLuaType(lua_State* L, const char* functionName, const int pos, const char* publicName, std::initializer_list<int> luaTypes, const bool isOptional = false);

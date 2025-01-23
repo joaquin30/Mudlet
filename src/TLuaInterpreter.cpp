@@ -288,7 +288,7 @@ bool TLuaInterpreter::getVerifiedBooleanLikeValue(lua_State* L, const char* func
     case LUA_TBOOLEAN:
         return lua_toboolean(L, pos);
     case LUA_TNUMBER:
-        return lua_tointeger(L, pos) != static_cast<lua_Number>(0);
+        return lua_tonumber(L, pos) != static_cast<lua_Number>(0);
     case LUA_TNIL:
         return false;
     case LUA_TNONE:
@@ -304,9 +304,9 @@ bool TLuaInterpreter::getVerifiedBooleanLikeValue(lua_State* L, const char* func
 }
 
 // No documentation available in wiki - internal function
-// Verifies if a table is of type {string, string, ...} and returns a QStringList
+// Verifies if a parameter is a table, ignores values in the table that are not strings and returns a QStringList
 // See also: getVerifiedBool
-QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool strictValueType, const bool isOptional)
+QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* functionName, const int pos, const char* publicName, const bool isOptional)
 {
     if (lua_type(L, pos) != LUA_TTABLE) {
         errorArgumentType(L, functionName, pos, publicName, "table of strings", isOptional);
@@ -319,10 +319,6 @@ QStringList TLuaInterpreter::getVerifiedStringList(lua_State* L, const char* fun
     while (lua_next(L, pos) != -1) {
         if (lua_type(L, -1) == LUA_TSTRING) {
             list << lua_tostring(L, -1);
-        } else if (strictValueType) {
-            errorArgumentType(L, functionName, pos, publicName, "string inside table", isOptional);
-            lua_error(L);
-            Q_UNREACHABLE();
         }
         lua_pop(L, 1);
     }
@@ -3107,7 +3103,7 @@ int TLuaInterpreter::sendSocket(lua_State* L)
 {
     const QByteArray data = getVerifiedCString(L, __func__, 1, "data");
     bool parseCodes = false;
-    if (!lua_isnoneornil(L, 2)) {
+    if (lua_gettop(L) > 1) {
         parseCodes = getVerifiedBool(L, __func__, 2, "parse telnet codes {default = false}", true);
     }
 
